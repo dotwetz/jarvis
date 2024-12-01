@@ -1,117 +1,46 @@
-import speech_recognition as sr
-
 import pyttsx3
+import speech_recognition as sr
+import numpy as np
+import noisereduce as nr
 
-import datetime
-
-import webbrowser
-
-import os
-
-import random
-
-
-recognizer = sr.Recognizer()
-
+# Initialize text-to-speech engine
 engine = pyttsx3.init()
-
+voices = engine.getProperty('voices')
+for voice in voices:
+    if "english" in voice.name.lower() and "uk" in voice.id.lower():
+        engine.setProperty('voice', voice.id)
+        break
+engine.setProperty('rate', 150)
 
 def speak(text):
-
     engine.say(text)
-
     engine.runAndWait()
 
-
 def listen():
-
+    recognizer = sr.Recognizer()
     with sr.Microphone() as source:
-
+        recognizer.adjust_for_ambient_noise(source, duration=1)
         print("Listening for your command...")
-
-        recognizer.adjust_for_ambient_noise(source)
-
-        audio = recognizer.listen(source)
-
-        command = ""
-
         try:
-
-            command = recognizer.recognize_google(audio)
-
-            print(f"You said: {command}")
-
+            audio = recognizer.listen(source)
+            audio_data = np.frombuffer(audio.get_raw_data(), np.int16)
+            reduced_noise = nr.reduce_noise(y=audio_data, sr=16000)
+            command = recognizer.recognize_google(sr.AudioData(reduced_noise.tobytes(), 16000, 2), language="en-GB")
+            return command
         except sr.UnknownValueError:
-
-            print("Sorry, I didn't understand that.")
-
-            speak("Sorry, I didn't catch that.")
-
-        except sr.RequestError:
-
-            print("Sorry, I'm having trouble connecting to the internet.")
-
-            speak("Sorry, I can't connect to the internet.")
-
-        return command.lower()
-
-
-def execute_command(command):
-
-    if "hello" in command:
-
-        speak("Hello, how can I assist you today?")
-
-    elif "time" in command:
-
-        now = datetime.datetime.now()
-
-        current_time = now.strftime("%H:%M:%S")
-
-        speak(f"The current time is {current_time}")
-
-    elif "open" in command:
-
-        speak("Opening the website.")
-
-        site = command.split("open ")[1]
-
-        webbrowser.open(f"https://{site}")
-
-    elif "play music" in command:
-
-        speak("Playing some music.")
-
-        music_folder = "/home/your_username/Music"
-
-        songs = os.listdir(music_folder)
-
-        song = random.choice(songs)
-
-        os.system(f"xdg-open {os.path.join(music_folder, song)}")
-
-    elif "stop" in command:
-
-        speak("Goodbye!")
-
-        exit()
-
-    else:
-
-        speak("Sorry, I didn't recognize that command.")
-
-
-def run_jarvis():
-
-    speak("Hello, I am Jarvis, your personal assistant.")
-
-    while True:
-
-        command = listen()
-
-        execute_command(command)
-
+            print("Could not understand the audio.")
+        except sr.RequestError as e:
+            print(f"Speech recognition service error: {e}")
+        except OSError as e:
+            print(f"Audio system error: {e}")
+        return None
 
 if __name__ == "__main__":
-
-    run_jarvis()
+    while True:
+        command = listen()
+        if command:
+            if "shut up" in command.lower():
+                speak("As you wish. Let me know if you need me.")
+                break
+            else:
+                speak(f"You said: {command}")
